@@ -1,7 +1,7 @@
 use std::mem::take;
 
 use burn::{
-    optim::{GradientsParams, Optimizer, SgdConfig},
+    optim::{GradientsParams, Optimizer},
     prelude::*,
     tensor::backend::AutodiffBackend,
 };
@@ -151,7 +151,12 @@ impl<B: Backend> Agent<B> {
 }
 
 impl<B: AutodiffBackend> Agent<B> {
-    pub fn train_model(&mut self, device: &B::Device) {
+    pub fn train_model(
+        &mut self,
+        device: &B::Device,
+        optim: &mut impl Optimizer<Model<B>, B>,
+        lr: f64,
+    ) {
         let cross_entropy = CrossEntropyLossConfig::new().init(device);
         let loss = take(&mut self.memory)
             .into_iter()
@@ -167,8 +172,6 @@ impl<B: AutodiffBackend> Agent<B> {
             .fold(Tensor::zeros([1], device), |acc, x| acc + x);
         let grads = loss.backward();
         let grads = GradientsParams::from_grads(grads, &self.model);
-        let mut optim = SgdConfig::new().init();
-        let lr = 0.00001;
         self.model = optim.step(lr, self.model.clone(), grads);
         self.memory.clear();
     }

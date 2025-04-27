@@ -1,4 +1,7 @@
-use burn::backend::{Autodiff, Wgpu};
+use burn::{
+    backend::{Autodiff, Wgpu},
+    optim::SgdConfig,
+};
 use qchess_bot::{
     agent::Agent,
     model::{Model, ModelConfig},
@@ -21,6 +24,8 @@ async fn main() {
 
     let mut agent = Agent::new(model);
 
+    let mut optim = SgdConfig::new().init();
+    let lr = 0.00001;
     for _epoch in 0..10 {
         while agent.get_memory_len() < 50 {
             let mut chess = Chess::new();
@@ -73,6 +78,6 @@ async fn main() {
             agent.collect_trajectory(trajectory);
         }
         println!("{}", agent.get_memory_len());
-        agent.train_model(&device);
+        agent.train_model(&device, &mut optim, lr);
     }
 }
