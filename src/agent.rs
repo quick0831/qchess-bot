@@ -152,26 +152,19 @@ impl<B: Backend> Agent<B> {
 
 impl<B: AutodiffBackend> Agent<B> {
     pub fn train_model(&mut self, device: &B::Device) {
-        let ((logits, targets), weights): ((Vec<_>, Vec<_>), Vec<_>) = take(&mut self.memory)
+        let cross_entropy = CrossEntropyLossConfig::new().init(device);
+        let loss = take(&mut self.memory)
             .into_iter()
             .map(|record| {
-                let logit = record.model_output.to_data().to_vec().unwrap();
-                let logit: [f32; 64 * 64] = logit.try_into().unwrap();
                 let target = chess_move_to_id(&record.action) as i32;
-                ((logit, target), record.reward)
+                cross_entropy
+                    .forward(
+                        record.model_output.reshape([1, -1]),
+                        Tensor::from_ints([target], device),
+                    )
+                    .mul_scalar(record.reward)
             })
-            .unzip();
-        let logits: &[f32] = logits.as_flattened();
-        let targets: &[i32] = targets.as_ref();
-        let logits: Tensor<B, 1> = Tensor::from_floats(logits, device);
-        let logits = logits.reshape([-1, 64 * 64]);
-        let targets = Tensor::from_ints(targets, device);
-        let weights = Some(weights);
-
-        let cross_entropy = CrossEntropyLossConfig::new()
-            //.with_weights(weights)
-            .init(device);
-        let loss = cross_entropy.forward(logits, targets);
+            .fold(Tensor::zeros([1], device), |acc, x| acc + x);
         let grads = loss.backward();
         let grads = GradientsParams::from_grads(grads, &self.model);
         let mut optim = SgdConfig::new().init();
