@@ -3,7 +3,7 @@ use qchess_bot::{
     agent::Agent,
     model::{Model, ModelConfig},
 };
-use shakmaty::{Chess, Position, fen::Fen, uci::UciMove};
+use shakmaty::{Chess, Position, fen::Fen, san::SanPlus, uci::UciMove};
 use uciengine::uciengine::*;
 
 #[tokio::main(flavor = "current_thread")]
@@ -26,10 +26,20 @@ async fn main() {
             let mut chess = Chess::new();
             let mut game = agent.start_new_game(chess.clone(), &device);
             let trajectory = loop {
+                let mut reward = -0.002; // punish for making the game long
                 let action = game.make_action();
+                // reward for capturing
+                if action.is_capture() {
+                    reward += 0.05;
+                }
+                let white_move = SanPlus::from_move(chess.clone(), &action);
                 chess.play_unchecked(&action);
+                // reward for checking the opposing king
                 if chess.is_game_over() {
                     break game.game_end();
+                }
+                if chess.is_check() {
+                    reward += 0.05;
                 }
                 let fen =
                     Fen::from_setup(chess.clone().into_setup(shakmaty::EnPassantMode::Always))
@@ -41,8 +51,19 @@ async fn main() {
                 let engine_move = engine.go(go_job).await.unwrap();
                 let engine_move: UciMove = engine_move.bestmove.unwrap().parse().unwrap();
                 let engine_move = engine_move.to_move(&chess).unwrap();
+                let black_move = SanPlus::from_move(chess.clone(), &engine_move);
                 chess.play_unchecked(&engine_move);
-                let reward = 0.0;
+                // punish for being checked
+                if chess.is_check() {
+                    reward -= 0.05;
+                }
+                println!(
+                    "{:5}.\t{}\t{}\treward: {:+.4}",
+                    chess.fullmoves().get() - 1,
+                    white_move,
+                    black_move,
+                    reward,
+                );
                 game.get_feedback(chess.clone(), reward);
                 if chess.is_game_over() {
                     break game.game_end();
