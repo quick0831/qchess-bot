@@ -34,9 +34,11 @@ fn main() {
                 white_reward = -0.002; // punish for making the game long
                 let white_action = game_white.make_action();
                 let white_move = SanPlus::from_move(chess.clone(), &white_action);
-                // reward for capturing
                 if white_action.is_capture() {
+                    // reward for capturing
                     white_reward += 0.05;
+                    // punish for being captured
+                    black_reward -= 0.05;
                 }
                 chess.play_unchecked(&white_action);
                 if chess.is_check() {
@@ -69,6 +71,12 @@ fn main() {
                     game_black = Some(agent.start_new_game(chess.clone(), &device));
                 }
                 let black_action = game_black.as_mut().unwrap().make_action();
+                if black_action.is_capture() {
+                    // reward for capturing
+                    black_reward += 0.05;
+                    // punish for being captured
+                    white_reward -= 0.05;
+                }
                 chess.play_unchecked(&black_action);
                 black_move = Some(SanPlus::from_move(chess.clone(), &black_action));
                 // reward for capturing
