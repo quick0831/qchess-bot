@@ -3,4 +3,5 @@ resolver = "2"
 members = [
     "qchess-bot",
     "train-against-stockfish",
+    "train-against-self",
 ]

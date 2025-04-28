@@ -1,0 +1,9 @@
+[package]
+name = "train-against-self"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+qchess-bot = { path = "../qchess-bot" }
+burn = { version = "0.17.0", features = ["train", "wgpu"] }
+shakmaty = "0.27.3"

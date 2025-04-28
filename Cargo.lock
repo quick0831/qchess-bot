@@ -4587,6 +4587,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "train-against-self"
+version = "0.1.0"
+dependencies = [
+ "burn",
+ "qchess-bot",
+ "shakmaty",
+]
+
+[[package]]
 name = "train-against-stockfish"
 version = "0.1.0"
 dependencies = [
