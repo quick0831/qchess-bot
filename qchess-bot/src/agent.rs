@@ -141,8 +141,15 @@ impl<B: Backend> Agent<B> {
         }
     }
 
-    pub fn collect_trajectory(&mut self, mut trajectory: Trajectory<B>) {
-        self.memory.append(&mut trajectory.0);
+    pub fn collect_trajectory(&mut self, trajectory: Trajectory<B>, final_reward: f32) {
+        let mut trajectory = trajectory.0;
+        let decay = 0.9;
+        let mut delayed_reward = final_reward;
+        for record in trajectory.iter_mut().rev() {
+            delayed_reward = record.reward + delayed_reward * decay;
+            record.reward = delayed_reward;
+        }
+        self.memory.append(&mut trajectory);
     }
 
     pub fn get_memory_len(&self) -> usize {

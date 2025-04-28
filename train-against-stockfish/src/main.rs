@@ -6,7 +6,7 @@ use qchess_bot::{
     agent::Agent,
     model::{Model, ModelConfig},
 };
-use shakmaty::{Chess, Position, fen::Fen, san::SanPlus, uci::UciMove};
+use shakmaty::{Chess, Color, Outcome, Position, fen::Fen, san::SanPlus, uci::UciMove};
 use uciengine::uciengine::*;
 
 #[tokio::main(flavor = "current_thread")]
@@ -30,7 +30,7 @@ async fn main() {
         while agent.get_memory_len() < 50 {
             let mut chess = Chess::new();
             let mut game = agent.start_new_game(chess.clone(), &device);
-            let trajectory = loop {
+            let (trajectory, outcome) = loop {
                 let mut reward = -0.002; // punish for making the game long
                 let action = game.make_action();
                 // reward for capturing
@@ -40,8 +40,8 @@ async fn main() {
                 let white_move = SanPlus::from_move(chess.clone(), &action);
                 chess.play_unchecked(&action);
                 // reward for checking the opposing king
-                if chess.is_game_over() {
-                    break game.game_end();
+                if let Some(outcome) = chess.outcome() {
+                    break (game.game_end(), outcome);
                 }
                 if chess.is_check() {
                     reward += 0.05;
@@ -70,12 +70,21 @@ async fn main() {
                     reward,
                 );
                 game.get_feedback(chess.clone(), reward);
-                if chess.is_game_over() {
-                    break game.game_end();
+                if let Some(outcome) = chess.outcome() {
+                    break (game.game_end(), outcome);
                 }
             };
             println!("{:?}", chess.outcome());
-            agent.collect_trajectory(trajectory);
+            let final_reward = match outcome {
+                Outcome::Decisive {
+                    winner: Color::White,
+                } => 1.0,
+                Outcome::Decisive {
+                    winner: Color::Black,
+                } => -1.0,
+                Outcome::Draw => -0.1,
+            };
+            agent.collect_trajectory(trajectory, final_reward);
         }
         println!("{}", agent.get_memory_len());
         agent.train_model(&device, &mut optim, lr);
