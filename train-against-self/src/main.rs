@@ -1,6 +1,6 @@
 use burn::{
     backend::{Autodiff, Wgpu},
-    optim::SgdConfig,
+    optim::AdamConfig,
 };
 use qchess_bot::{
     agent::{Agent, GameSession},
@@ -20,9 +20,9 @@ fn main() {
 
     let mut agent = Agent::new(model);
 
-    let mut optim = SgdConfig::new().init();
-    let lr = 0.00001;
-    for _epoch in 0..50 {
+    let mut optim = AdamConfig::new().init();
+    let lr = 0.0001;
+    for _epoch in 0..200 {
         while agent.get_memory_len() < 200 {
             let mut chess = Chess::new();
             let mut game_white = agent.start_new_game(chess.clone(), &device);
@@ -31,7 +31,7 @@ fn main() {
             let mut black_reward = 0.0;
             let mut black_move = None;
             let (white_trajectory, black_trajectory, outcome) = loop {
-                white_reward = -0.002; // punish for making the game long
+                white_reward = 0.1 + -0.002 * chess.fullmoves().get() as f32; // punish for making the game long
                 let white_action = game_white.make_action();
                 let white_move = SanPlus::from_move(chess.clone(), &white_action);
                 if white_action.is_capture() {
@@ -66,7 +66,7 @@ fn main() {
                     );
                 }
 
-                black_reward = -0.002; // punish for making the game long
+                black_reward = 0.1 + -0.002 * chess.fullmoves().get() as f32; // punish for making the game long
                 if game_black.is_none() {
                     game_black = Some(agent.start_new_game(chess.clone(), &device));
                 }
