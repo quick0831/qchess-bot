@@ -1,7 +1,7 @@
 use std::mem::{replace, take};
 
 use burn::{
-    optim::{GradientsAccumulator, GradientsParams, Optimizer},
+    optim::{GradientsParams, Optimizer},
     prelude::*,
     tensor::backend::AutodiffBackend,
 };
@@ -38,20 +38,7 @@ fn chess_move_to_id(m: &Move) -> u32 {
     from as u32 + to as u32 * 64
 }
 
-fn chess_to_tensor<B: Backend>(chess: Chess, device: &B::Device) -> Tensor<B, 4> {
-    let mut board = chess.board().clone();
-    if chess.turn() == Color::Black {
-        board.swap_colors();
-        board.flip_vertical();
-    }
-    let ep_arr = if let Some(ep_sq) = chess.maybe_ep_square() {
-        let mut arr = [[0.0; 8]; 8];
-        let (file, rank) = ep_sq.coords();
-        arr[file as usize][rank as usize] = 1.0;
-        arr
-    } else {
-        [[0.0; 8]; 8]
-    };
+fn chess_to_tensor<B: Backend>(chess: &[Chess], device: &B::Device) -> Tensor<B, 4> {
     let bitboard_to_arr = |mut b: Bitboard| -> [[f32; 8]; 8] {
         let mut arr = [[0.0; 8]; 8];
         while let Some(sq) = b.pop_back() {
@@ -60,30 +47,48 @@ fn chess_to_tensor<B: Backend>(chess: Chess, device: &B::Device) -> Tensor<B, 4>
         }
         arr
     };
-    Tensor::from_data(
-        [[
-            bitboard_to_arr(board.white().intersect(board.pawns())),
-            bitboard_to_arr(board.white().intersect(board.knights())),
-            bitboard_to_arr(board.white().intersect(board.bishops())),
-            bitboard_to_arr(board.white().intersect(board.rooks())),
-            bitboard_to_arr(board.white().intersect(board.queens())),
-            bitboard_to_arr(board.white().intersect(board.kings())),
-            bitboard_to_arr(board.black().intersect(board.pawns())),
-            bitboard_to_arr(board.black().intersect(board.knights())),
-            bitboard_to_arr(board.black().intersect(board.bishops())),
-            bitboard_to_arr(board.black().intersect(board.rooks())),
-            bitboard_to_arr(board.black().intersect(board.queens())),
-            bitboard_to_arr(board.black().intersect(board.kings())),
-            ep_arr,
-        ]],
-        device,
-    )
+    let data: Vec<f32> = chess
+        .iter()
+        .flat_map(|chess| {
+            let mut board = chess.board().clone();
+            if chess.turn() == Color::Black {
+                board.swap_colors();
+                board.flip_vertical();
+            }
+            [
+                bitboard_to_arr(board.white().intersect(board.pawns())),
+                bitboard_to_arr(board.white().intersect(board.knights())),
+                bitboard_to_arr(board.white().intersect(board.bishops())),
+                bitboard_to_arr(board.white().intersect(board.rooks())),
+                bitboard_to_arr(board.white().intersect(board.queens())),
+                bitboard_to_arr(board.white().intersect(board.kings())),
+                bitboard_to_arr(board.black().intersect(board.pawns())),
+                bitboard_to_arr(board.black().intersect(board.knights())),
+                bitboard_to_arr(board.black().intersect(board.bishops())),
+                bitboard_to_arr(board.black().intersect(board.rooks())),
+                bitboard_to_arr(board.black().intersect(board.queens())),
+                bitboard_to_arr(board.black().intersect(board.kings())),
+                if let Some(ep_sq) = chess.maybe_ep_square() {
+                    let mut arr = [[0.0; 8]; 8];
+                    let (file, rank) = ep_sq.coords();
+                    arr[file as usize][rank as usize] = 1.0;
+                    arr
+                } else {
+                    [[0.0; 8]; 8]
+                },
+            ]
+        })
+        .flatten()
+        .flatten()
+        .collect();
+    let data: &[f32] = &data;
+    Tensor::<B, 1>::from_floats(data, device).reshape([-1, 13, 8, 8])
 }
 
 impl<B: Backend> GameSession<'_, '_, B> {
     pub fn make_action(&mut self) -> Move {
         // generate input for model
-        let input_tensor: Tensor<B, 4> = chess_to_tensor(self.state.clone(), self.device);
+        let input_tensor: Tensor<B, 4> = chess_to_tensor(&[self.state.clone()], self.device);
 
         // run the model
         let output_tensor = self.model.forward(input_tensor);
@@ -166,23 +171,19 @@ impl<B: AutodiffBackend> Agent<B> {
         lr: f64,
     ) {
         let cross_entropy = CrossEntropyLossConfig::new().init(device);
-        let grads = take(&mut self.memory)
+        let (states, (actions, rewards)): (Vec<_>, (Vec<_>, Vec<_>)) = take(&mut self.memory)
             .into_iter()
-            .map(|record| {
-                let model_input = chess_to_tensor(record.state, device);
-                let model_output = self.model.forward(model_input);
-                let targets = Tensor::from_ints([record.action], device);
-                cross_entropy
-                    .forward(model_output, targets)
-                    .mul_scalar(record.reward)
-            })
-            .map(|loss| loss.backward())
-            .map(|grads| GradientsParams::from_grads(grads, &self.model));
-        let mut accumulator = GradientsAccumulator::new();
-        for grads in grads {
-            accumulator.accumulate(&self.model, grads);
-        }
-        self.model = optim.step(lr, self.model.clone(), accumulator.grads());
-        self.memory.clear();
+            .map(|record| (record.state, (record.action, record.reward)))
+            .unzip();
+        let model_input = chess_to_tensor(&states, device);
+        let model_output = self.model.forward(model_input);
+        let targets = Tensor::from_ints(actions.as_slice(), device);
+        let rewards = Tensor::from_floats(rewards.as_slice(), device);
+        let grads = cross_entropy
+            .forward(model_output, targets)
+            .mul(rewards)
+            .backward();
+        let grads = GradientsParams::from_grads(grads, &self.model);
+        self.model = optim.step(lr, self.model.clone(), grads);
     }
 }
