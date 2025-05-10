@@ -101,6 +101,8 @@ impl<B: Backend> GameSession<'_, '_, B> {
             .map(chess_move_to_id)
             .map(|id| data[id as usize])
             .map(f32::exp)
+            // replace bad values with a small value
+            .map(|w| if w > 0.01 { w } else { 0.01 })
             .collect::<Vec<_>>();
         let dist = WeightedIndex::new(weights).unwrap();
         let mut rng = rand::rng();
