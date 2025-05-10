@@ -103,6 +103,14 @@ fn main() {
                         outcome,
                     );
                 }
+                // Stop the session if the game is too long
+                if chess.fullmoves().get() > 250 {
+                    break (
+                        game_white.game_end(),
+                        Some(game_black.unwrap().game_end()),
+                        Outcome::Draw,
+                    );
+                }
             };
             println!("{:?}", outcome);
             let (white_final_reward, black_final_reward) = match outcome {
