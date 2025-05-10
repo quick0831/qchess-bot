@@ -5,11 +5,11 @@ use burn::{
     prelude::*,
     tensor::backend::AutodiffBackend,
 };
-use nn::loss::CrossEntropyLossConfig;
+use nn::loss::MseLoss;
 use rand::{
-    distr::{weighted::WeightedIndex, Distribution},
-    seq::IndexedRandom,
     Rng,
+    distr::{Distribution, weighted::WeightedIndex},
+    seq::IndexedRandom,
 };
 use shakmaty::{Bitboard, Chess, Color, Move, Position};
 
@@ -186,17 +186,17 @@ impl<B: AutodiffBackend> Agent<B> {
         optim: &mut impl Optimizer<Model<B>, B>,
         lr: f64,
     ) {
-        let cross_entropy = CrossEntropyLossConfig::new().init(device);
         let (states, (actions, rewards)): (Vec<_>, (Vec<_>, Vec<_>)) = take(&mut self.memory)
             .into_iter()
             .map(|record| (record.state, (record.action, record.reward)))
             .unzip();
         let model_input = chess_to_tensor(&states, device);
         let model_output = self.model.forward(model_input);
-        let targets = Tensor::from_ints(actions.as_slice(), device);
-        let rewards = Tensor::from_floats(rewards.as_slice(), device);
-        let grads = cross_entropy
-            .forward(model_output, targets)
+        let targets: Tensor<B, 1> = Tensor::from_floats(actions.as_slice(), device);
+        let targets = targets.one_hot(4096).detach();
+        let rewards = Tensor::from_floats(rewards.as_slice(), device).detach();
+        let grads = MseLoss::new()
+            .forward(model_output, targets, nn::loss::Reduction::Mean)
             .mul(rewards)
             .backward();
         let grads = GradientsParams::from_grads(grads, &self.model);
