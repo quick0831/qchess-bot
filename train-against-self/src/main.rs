@@ -22,7 +22,7 @@ fn main() {
 
     let mut optim = AdamConfig::new().init();
     let lr = 0.0001;
-    for _epoch in 0..200 {
+    for _epoch in 0..2000 {
         while agent.get_memory_len() < 200 {
             let mut chess = Chess::new();
             let mut game_white = agent.start_new_game(chess.clone(), &device);
@@ -41,9 +41,9 @@ fn main() {
                 chess.play_unchecked(&white_action);
                 if chess.is_check() {
                     // reward for checking the opposing king
-                    white_reward += 0.05;
+                    white_reward += 0.2;
                     // punish for being checked
-                    black_reward -= 0.05;
+                    black_reward -= 0.2;
                 }
                 if let Some(ref mut game_black) = game_black {
                     game_black.get_feedback(chess.clone(), black_reward);
@@ -74,9 +74,9 @@ fn main() {
                 }
                 if chess.is_check() {
                     // punish for being checked
-                    white_reward -= 0.05;
+                    white_reward -= 0.2;
                     // reward for checking the opposing king
-                    black_reward += 0.05;
+                    black_reward += 0.2;
                 }
                 game_white.get_feedback(chess.clone(), white_reward);
                 if let Some(outcome) = chess.outcome() {
