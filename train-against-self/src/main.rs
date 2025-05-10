@@ -22,7 +22,8 @@ fn main() {
 
     let mut optim = AdamConfig::new().init();
     let lr = 0.0001;
-    for _epoch in 0..2000 {
+    for epoch in 0..2000 {
+        println!("epoch: {:5}", epoch + 1);
         while agent.get_memory_len() < 200 {
             let mut chess = Chess::new();
             let mut game_white = agent.start_new_game(chess.clone(), &device);
@@ -110,7 +111,6 @@ fn main() {
                 agent.collect_trajectory(black_trajectory, black_final_reward);
             }
         }
-        println!("{}", agent.get_memory_len());
         agent.train_model(&device, &mut optim, lr);
     }
 }
