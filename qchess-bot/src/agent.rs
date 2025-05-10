@@ -6,7 +6,11 @@ use burn::{
     tensor::backend::AutodiffBackend,
 };
 use nn::loss::CrossEntropyLossConfig;
-use rand::distr::{Distribution, weighted::WeightedIndex};
+use rand::{
+    distr::{weighted::WeightedIndex, Distribution},
+    seq::IndexedRandom,
+    Rng,
+};
 use shakmaty::{Bitboard, Chess, Color, Move, Position};
 
 use crate::model::Model;
@@ -26,6 +30,7 @@ pub struct GameSession<'d, 'm, B: Backend> {
 
 pub struct Trajectory(Vec<Record>);
 
+#[derive(Debug, Clone)]
 pub struct Record {
     state: Chess,
     action: u32,
@@ -159,7 +164,14 @@ impl<B: Backend> Agent<B> {
             delayed_reward = record.reward + delayed_reward * decay;
             record.reward = delayed_reward;
         }
-        self.memory.append(&mut trajectory);
+        let mut rng = rand::rng();
+        let amount = rng.random_range(30..50);
+        if amount < trajectory.len() {
+            let samples = trajectory.as_slice().choose_multiple(&mut rng, amount);
+            self.memory.extend(samples.cloned());
+        } else {
+            self.memory.append(&mut trajectory);
+        }
     }
 
     pub fn get_memory_len(&self) -> usize {
