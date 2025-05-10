@@ -95,10 +95,12 @@ impl<B: Backend> GameSession<'_, '_, B> {
         let data: Vec<f32> = output_tensor.to_data().into_vec().unwrap();
 
         // pick a random move base on weight
+        let is_black = self.state.turn() == Color::Black;
         let legal_moves = self.state.legal_moves();
         let weights = legal_moves
             .iter()
-            .map(chess_move_to_id)
+            .map(|m| if is_black { m.to_mirrored() } else { m.clone() })
+            .map(|m| chess_move_to_id(&m))
             .map(|id| data[id as usize])
             .map(f32::exp)
             // replace bad values with a small value
