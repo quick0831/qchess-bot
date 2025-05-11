@@ -6,6 +6,7 @@ use qchess_bot::{
     agent::{Agent, GameSession},
     model::{Model, ModelConfig},
 };
+use rand::seq::IndexedRandom;
 use shakmaty::{Chess, Color, Outcome, Position};
 
 fn main() {
@@ -112,5 +113,49 @@ fn main() {
             }
         }
         agent.train_model(&device, &mut optim, lr);
+
+        // run evaluation against random
+        if (epoch + 1) % 10 == 0 {
+            let mut wins = 0;
+            let mut draws = 0;
+            for _round in 0..10 {
+                let mut chess = Chess::new();
+                let mut game = agent.start_new_game(chess.clone(), &device);
+                let mut rng = rand::rng();
+                let outcome = loop {
+                    let white_action = game.make_action();
+                    chess.play_unchecked(&white_action);
+                    if let Some(outcome) = chess.outcome() {
+                        game.game_end();
+                        break outcome;
+                    }
+                    let black_action = chess.legal_moves().choose(&mut rng).unwrap().clone();
+                    chess.play_unchecked(&black_action);
+                    game.get_feedback(chess.clone(), 0.0);
+                    if let Some(outcome) = chess.outcome() {
+                        game.game_end();
+                        break outcome;
+                    }
+                };
+                match outcome {
+                    Outcome::Decisive {
+                        winner: Color::White,
+                    } => {
+                        wins += 1;
+                    }
+                    Outcome::Decisive {
+                        winner: Color::Black,
+                    } => {}
+                    Outcome::Draw => {
+                        draws += 1;
+                    }
+                }
+            }
+            let loses = 10 - wins - draws;
+            println!(
+                "Against random play: {:2} wins, {:2} draws, {:2} loses",
+                wins, draws, loses,
+            );
+        }
     }
 }

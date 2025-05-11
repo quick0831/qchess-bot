@@ -7,3 +7,4 @@ edition = "2024"
 qchess-bot = { path = "../qchess-bot" }
 burn = { version = "0.17.0", features = ["train", "wgpu"] }
 shakmaty = "0.27.3"
+rand = "0.9.1"
