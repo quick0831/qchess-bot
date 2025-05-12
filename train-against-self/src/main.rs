@@ -118,38 +118,38 @@ fn main() {
         if (epoch + 1) % 10 == 0 {
             let mut wins = 0;
             let mut draws = 0;
-            for _round in 0..10 {
-                let mut chess = Chess::new();
-                let mut game = agent.start_new_game(chess.clone(), &device);
-                let mut rng = rand::rng();
-                let outcome = loop {
-                    let white_action = game.make_action();
-                    chess.play_unchecked(&white_action);
-                    if let Some(outcome) = chess.outcome() {
-                        game.game_end();
-                        break outcome;
+            let mut games = vec![Chess::new(); 10];
+            let mut rng = rand::rng();
+            while !games.is_empty() {
+                let output = agent.inference(&games, &device);
+                for (idx, game) in games.iter_mut().enumerate() {
+                    game.play_unchecked(&output[idx]);
+                    if game.outcome().is_some() {
+                        continue;
                     }
-                    let black_action = chess.legal_moves().choose(&mut rng).unwrap().clone();
-                    chess.play_unchecked(&black_action);
-                    game.get_feedback(chess.clone(), 0.0);
-                    if let Some(outcome) = chess.outcome() {
-                        game.game_end();
-                        break outcome;
-                    }
-                };
-                match outcome {
-                    Outcome::Decisive {
-                        winner: Color::White,
-                    } => {
-                        wins += 1;
-                    }
-                    Outcome::Decisive {
-                        winner: Color::Black,
-                    } => {}
-                    Outcome::Draw => {
-                        draws += 1;
-                    }
+                    let black_action = game.legal_moves().choose(&mut rng).unwrap().clone();
+                    game.play_unchecked(&black_action);
                 }
+                games.retain(|game| {
+                    if let Some(outcome) = game.outcome() {
+                        match outcome {
+                            Outcome::Decisive {
+                                winner: Color::White,
+                            } => {
+                                wins += 1;
+                            }
+                            Outcome::Decisive {
+                                winner: Color::Black,
+                            } => {}
+                            Outcome::Draw => {
+                                draws += 1;
+                            }
+                        }
+                        false
+                    } else {
+                        true
+                    }
+                });
             }
             let loses = 10 - wins - draws;
             println!(

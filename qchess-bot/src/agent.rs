@@ -20,12 +20,12 @@ pub struct Agent<B: Backend> {
     model: Model<B>,
 }
 
-pub struct GameSession<'d, 'm, B: Backend> {
+pub struct GameSession<'d, 'a, B: Backend> {
     trajectory: Vec<Record>,
     state: Chess,
     last_move: Option<u32>,
     device: &'d B::Device,
-    model: &'m Model<B>,
+    agent: &'a Agent<B>,
 }
 
 pub struct Trajectory(Vec<Record>);
@@ -92,30 +92,7 @@ fn chess_to_tensor<B: Backend>(chess: &[Chess], device: &B::Device) -> Tensor<B,
 
 impl<B: Backend> GameSession<'_, '_, B> {
     pub fn make_action(&mut self) -> Move {
-        // generate input for model
-        let input_tensor: Tensor<B, 4> = chess_to_tensor(&[self.state.clone()], self.device);
-
-        // run the model
-        let output_tensor = self.model.forward(input_tensor);
-        let data: Vec<f32> = output_tensor.to_data().into_vec().unwrap();
-
-        // pick a random move base on weight
-        let is_black = self.state.turn() == Color::Black;
-        let legal_moves = self.state.legal_moves();
-        let weights = legal_moves
-            .iter()
-            .map(|m| if is_black { m.to_mirrored() } else { m.clone() })
-            .map(|m| chess_move_to_id(&m))
-            .map(|id| data[id as usize])
-            .map(f32::exp)
-            // clip values to avoid infinite and 0
-            .map(|w| w.clamp(0.01, 1e25))
-            .collect::<Vec<_>>();
-        let dist = WeightedIndex::new(weights).unwrap();
-        let mut rng = rand::rng();
-        let picked_move = legal_moves[dist.sample(&mut rng)].clone();
-
-        // take the move
+        let picked_move = self.agent.inference(&[self.state.clone()], self.device)[0].clone();
         self.last_move = Some(chess_move_to_id(&picked_move));
         picked_move
     }
@@ -152,7 +129,7 @@ impl<B: Backend> Agent<B> {
             state: initial_state,
             last_move: None,
             device,
-            model: &self.model,
+            agent: self,
         }
     }
 
@@ -176,6 +153,49 @@ impl<B: Backend> Agent<B> {
 
     pub fn get_memory_len(&self) -> usize {
         self.memory.len()
+    }
+
+    pub fn model(&self) -> &Model<B> {
+        &self.model
+    }
+
+    pub fn inference(&self, games: &[Chess], device: &B::Device) -> Vec<Move> {
+        // generate input for model
+        let input_tensor: Tensor<B, 4> = chess_to_tensor(games, device);
+
+        // run the model
+        let output_tensor = self.model.forward(input_tensor);
+
+        let mut picked_moves = Vec::new();
+        for (idx, game) in games.iter().enumerate() {
+            let data: Vec<f32> = output_tensor
+                .clone()
+                .slice(s![idx, ..])
+                .to_data()
+                .into_vec()
+                .unwrap();
+
+            // pick a random move base on weight
+            let is_black = game.turn() == Color::Black;
+            let legal_moves = game.legal_moves();
+            let weights = legal_moves
+                .iter()
+                .map(|m| if is_black { m.to_mirrored() } else { m.clone() })
+                .map(|m| chess_move_to_id(&m))
+                .map(|id| data[id as usize])
+                .map(f32::exp)
+                // clip values to avoid infinite and 0
+                .map(|w| w.clamp(0.01, 1e25))
+                .collect::<Vec<_>>();
+            let dist = WeightedIndex::new(weights).unwrap();
+            let mut rng = rand::rng();
+            let picked_move = legal_moves[dist.sample(&mut rng)].clone();
+
+            // take the move
+            picked_moves.push(picked_move);
+        }
+
+        picked_moves
     }
 }
 
