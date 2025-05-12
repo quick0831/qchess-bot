@@ -20,17 +20,17 @@ pub struct Model<B: Backend> {
 impl ModelConfig {
     pub fn init<B: Backend>(&self, device: &B::Device) -> Model<B> {
         Model {
-            conv1: Conv2dConfig::new([13, 16], [3, 3])
+            conv1: Conv2dConfig::new([13, 64], [3, 3])
                 .with_padding(nn::PaddingConfig2d::Same)
                 .init(device),
-            conv2: Conv2dConfig::new([16, 16], [3, 3])
+            conv2: Conv2dConfig::new([64, 64], [3, 3])
                 .with_padding(nn::PaddingConfig2d::Same)
                 .init(device),
-            conv3: Conv2dConfig::new([16, 8], [3, 3])
+            conv3: Conv2dConfig::new([64, 8], [3, 3])
                 .with_padding(nn::PaddingConfig2d::Same)
                 .init(device),
-            linear1: LinearConfig::new(8 * 64, 256).init(device),
-            linear2: LinearConfig::new(256, 64 * 64).init(device),
+            linear1: LinearConfig::new(8 * 64, 16).init(device),
+            linear2: LinearConfig::new(16, 64 * 64).init(device),
             activation: Relu::new(),
         }
     }
