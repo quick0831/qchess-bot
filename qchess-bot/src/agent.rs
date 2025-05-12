@@ -171,7 +171,7 @@ impl<B: Backend> Agent<B> {
             let data: Vec<f32> = output_tensor
                 .clone()
                 .slice(s![idx, ..])
-                .to_data()
+                .into_data()
                 .into_vec()
                 .unwrap();
 
