@@ -8,26 +8,30 @@ use shakmaty::{Chess, Color, Outcome, Position};
 
 #[cfg(feature = "cuda")]
 use burn::backend::Cuda;
-#[cfg(feature = "tch")]
-use burn::backend::LibTorch;
 #[cfg(feature = "cpu")]
 use burn::backend::NdArray;
 #[cfg(feature = "wgpu")]
 use burn::backend::Wgpu;
+#[cfg(feature = "tch")]
+use burn::backend::{LibTorch, libtorch::LibTorchDevice};
 
 fn main() {
     #[cfg(feature = "cuda")]
     type MyBackend = Autodiff<Cuda<f32, i32>>;
-    #[cfg(feature = "tch")]
-    type MyBackend = Autodiff<LibTorch<f32>>;
     #[cfg(feature = "cpu")]
     type MyBackend = Autodiff<NdArray<f32, i32>>;
     #[cfg(feature = "wgpu")]
     type MyBackend = Autodiff<Wgpu<f32, i32>>;
+    #[cfg(feature = "tch")]
+    type MyBackend = Autodiff<LibTorch<f32>>;
 
     let model_config = ModelConfig {};
 
+    #[cfg(not(feature = "tch"))]
     let device = Default::default();
+    #[cfg(feature = "tch")]
+    let device = LibTorchDevice::Cuda(0);
+
     let model: Model<MyBackend> = model_config.init(&device);
 
     println!("{model}");
