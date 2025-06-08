@@ -5,3 +5,9 @@ members = [
     "train-against-stockfish",
     "train-against-self",
 ]
+
+# For training on kaggle environment
+[profile.kaggle]
+inherits = "release"
+lto = false
+incremental = false

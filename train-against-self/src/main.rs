@@ -1,7 +1,4 @@
-use burn::{
-    backend::{Autodiff, Wgpu},
-    optim::AdamConfig,
-};
+use burn::{backend::Autodiff, optim::AdamConfig};
 use qchess_bot::{
     agent::{Agent, GameSession},
     model::{Model, ModelConfig},
@@ -9,7 +6,19 @@ use qchess_bot::{
 use rand::seq::IndexedRandom;
 use shakmaty::{Chess, Color, Outcome, Position};
 
+#[cfg(feature = "cuda")]
+use burn::backend::Cuda;
+#[cfg(feature = "cpu")]
+use burn::backend::NdArray;
+#[cfg(feature = "wgpu")]
+use burn::backend::Wgpu;
+
 fn main() {
+    #[cfg(feature = "cuda")]
+    type MyBackend = Autodiff<Cuda<f32, i32>>;
+    #[cfg(feature = "cpu")]
+    type MyBackend = Autodiff<NdArray<f32, i32>>;
+    #[cfg(feature = "wgpu")]
     type MyBackend = Autodiff<Wgpu<f32, i32>>;
 
     let model_config = ModelConfig {};
