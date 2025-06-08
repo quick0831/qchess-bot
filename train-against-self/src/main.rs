@@ -8,6 +8,8 @@ use shakmaty::{Chess, Color, Outcome, Position};
 
 #[cfg(feature = "cuda")]
 use burn::backend::Cuda;
+#[cfg(feature = "tch")]
+use burn::backend::LibTorch;
 #[cfg(feature = "cpu")]
 use burn::backend::NdArray;
 #[cfg(feature = "wgpu")]
@@ -16,6 +18,8 @@ use burn::backend::Wgpu;
 fn main() {
     #[cfg(feature = "cuda")]
     type MyBackend = Autodiff<Cuda<f32, i32>>;
+    #[cfg(feature = "tch")]
+    type MyBackend = Autodiff<LibTorch<f32>>;
     #[cfg(feature = "cpu")]
     type MyBackend = Autodiff<NdArray<f32, i32>>;
     #[cfg(feature = "wgpu")]
