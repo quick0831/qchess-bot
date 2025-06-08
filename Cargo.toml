@@ -10,4 +10,3 @@ members = [
 [profile.kaggle]
 inherits = "release"
 lto = false
-incremental = false
