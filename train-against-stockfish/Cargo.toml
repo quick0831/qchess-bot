@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 qchess-bot = { path = "../qchess-bot" }
-burn = { version = "0.17.1", features = ["train", "wgpu"] }
+burn = { version = "0.18.0", features = ["train", "wgpu"] }
 shakmaty = "0.27.3"
 tokio = { version = "1.44.2", features = ["rt"], default-features = false }
 uciengine = "0.1.33"
