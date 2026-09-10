@@ -1,4 +1,11 @@
-use burn::{backend::Autodiff, optim::AdamConfig};
+#![recursion_limit = "256"]
+
+use burn::{
+    backend::Autodiff,
+    module::Module,
+    optim::AdamConfig,
+    record::{FullPrecisionSettings, NamedMpkFileRecorder},
+};
 use qchess_bot::{
     agent::{Agent, GameSession},
     model::{Model, ModelConfig},
@@ -175,4 +182,12 @@ fn main() {
             );
         }
     }
+
+    // Save model in MessagePack format with full precision
+    let model_path = "model";
+    let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
+    agent
+        .into_model()
+        .save_file(model_path, &recorder)
+        .expect("Should be able to save the model");
 }

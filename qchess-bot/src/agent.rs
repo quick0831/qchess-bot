@@ -159,6 +159,10 @@ impl<B: Backend> Agent<B> {
         &self.model
     }
 
+    pub fn into_model(self) -> Model<B> {
+        self.model
+    }
+
     pub fn inference(&self, games: &[Chess], device: &B::Device) -> Vec<Move> {
         // generate input for model
         let input_tensor: Tensor<B, 4> = chess_to_tensor(games, device);
