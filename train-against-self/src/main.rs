@@ -13,31 +13,30 @@ use qchess_bot::{
 use rand::seq::IndexedRandom;
 use shakmaty::{Chess, Color, Outcome, Position};
 
-#[cfg(feature = "cuda")]
-use burn::backend::Cuda;
-#[cfg(feature = "cpu")]
-use burn::backend::NdArray;
-#[cfg(feature = "wgpu")]
-use burn::backend::Wgpu;
-#[cfg(feature = "tch")]
-use burn::backend::{LibTorch, libtorch::LibTorchDevice};
-
 fn main() {
-    #[cfg(feature = "cuda")]
-    type MyBackend = Autodiff<Cuda<f32, i32>>;
-    #[cfg(feature = "cpu")]
-    type MyBackend = Autodiff<NdArray<f32, i32>>;
-    #[cfg(feature = "wgpu")]
-    type MyBackend = Autodiff<Wgpu<f32, i32>>;
-    #[cfg(feature = "tch")]
-    type MyBackend = Autodiff<LibTorch<f32>>;
+    cfg_select! {
+        feature = "wgpu" => {
+            type MyBackend = Autodiff<burn::backend::Wgpu<f32, i32>>;
+        }
+        feature = "cuda" => {
+            type MyBackend = Autodiff<burn::backend::Cuda<f32, i32>>;
+        }
+        feature = "tch" => {
+            type MyBackend = Autodiff<burn::backend::LibTorch<f32>>;
+        }
+        feature = "cpu" => {
+            type MyBackend = Autodiff<burn::backend::NdArray<f32, i32>>;
+        }
+    }
+
+    let device = cfg_select! {
+        feature = "wgpu" => Default::default(),
+        feature = "cuda" => Default::default(),
+        feature = "tch" => burn::backend::libtorch::LibTorchDevice::Cuda(0),
+        feature = "cpu" => Default::default(),
+    };
 
     let model_config = ModelConfig {};
-
-    #[cfg(not(feature = "tch"))]
-    let device = Default::default();
-    #[cfg(feature = "tch")]
-    let device = LibTorchDevice::Cuda(0);
 
     let model: Model<MyBackend> = model_config.init(&device);
 
