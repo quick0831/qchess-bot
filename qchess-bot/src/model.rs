@@ -7,6 +7,8 @@ use nn::{
     conv::{Conv2d, Conv2dConfig},
 };
 
+use crate::encode::UciMoveId;
+
 #[derive(Config, Debug)]
 pub struct ModelConfig {}
 
@@ -52,7 +54,7 @@ impl ModelConfig {
                 .with_padding(nn::PaddingConfig2d::Same)
                 .init(device),
             batch2: BatchNormConfig::new(2).init(device),
-            linear: LinearConfig::new(128, 64 * 64).init(device),
+            linear: LinearConfig::new(128, UciMoveId::TOTAL as usize).init(device),
             activation: Relu::new(),
         }
     }

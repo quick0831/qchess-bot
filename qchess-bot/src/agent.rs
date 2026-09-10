@@ -13,7 +13,7 @@ use rand::{
 };
 use shakmaty::{Bitboard, Chess, Color, Move, Position};
 
-use crate::model::Model;
+use crate::{encode::UciMoveId, model::Model};
 
 pub struct Agent<B: Backend> {
     memory: Vec<Record>,
@@ -23,7 +23,7 @@ pub struct Agent<B: Backend> {
 pub struct GameSession<'d, 'a, B: Backend> {
     trajectory: Vec<Record>,
     state: Chess,
-    last_move: Option<u32>,
+    last_move: Option<u16>,
     device: &'d B::Device,
     agent: &'a Agent<B>,
 }
@@ -33,14 +33,8 @@ pub struct Trajectory(Vec<Record>);
 #[derive(Debug, Clone)]
 pub struct Record {
     state: Chess,
-    action: u32,
+    action: u16,
     reward: f32,
-}
-
-fn chess_move_to_id(m: &Move) -> u32 {
-    let from = m.from().unwrap();
-    let to = m.to();
-    from as u32 + to as u32 * 64
 }
 
 fn chess_to_tensor<B: Backend>(chess: &[Chess], device: &B::Device) -> Tensor<B, 4> {
@@ -92,8 +86,11 @@ fn chess_to_tensor<B: Backend>(chess: &[Chess], device: &B::Device) -> Tensor<B,
 
 impl<B: Backend> GameSession<'_, '_, B> {
     pub fn make_action(&mut self) -> Move {
-        let picked_move = self.agent.inference(&[self.state.clone()], self.device)[0].clone();
-        self.last_move = Some(chess_move_to_id(&picked_move));
+        let picked_move = self
+            .agent
+            .inference(std::slice::from_ref(&self.state), self.device)[0]
+            .clone();
+        self.last_move = Some(UciMoveId::from_move(&picked_move).u16());
         picked_move
     }
 
@@ -185,8 +182,8 @@ impl<B: Backend> Agent<B> {
             let weights = legal_moves
                 .iter()
                 .map(|m| if is_black { m.to_mirrored() } else { m.clone() })
-                .map(|m| chess_move_to_id(&m))
-                .map(|id| data[id as usize])
+                .map(|m| UciMoveId::from_move(&m))
+                .map(|id| data[id.u16() as usize])
                 .map(f32::exp)
                 // clip values to avoid infinite and 0
                 .map(|w| w.clamp(0.01, 1e25))
