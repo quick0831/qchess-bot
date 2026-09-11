@@ -16,7 +16,7 @@ pub struct ModelConfig {}
 pub struct Model<B: Backend> {
     conv1: Conv2d<B>,
     batch1: BatchNorm<B, 2>,
-    residual: [ResBlock<B>; 40],
+    residual: [ResBlock<B>; 10],
     conv2: Conv2d<B>,
     batch2: BatchNorm<B, 2>,
     linear: Linear<B>,
@@ -35,26 +35,26 @@ struct ResBlock<B: Backend> {
 impl ModelConfig {
     pub fn init<B: Backend>(&self, device: &B::Device) -> Model<B> {
         Model {
-            conv1: Conv2dConfig::new([13, 256], [3, 3])
+            conv1: Conv2dConfig::new([13, 64], [3, 3])
                 .with_padding(nn::PaddingConfig2d::Same)
                 .init(device),
-            batch1: BatchNormConfig::new(256).init(device),
+            batch1: BatchNormConfig::new(64).init(device),
             residual: std::array::from_fn(|_| ResBlock {
-                conv1: Conv2dConfig::new([256, 256], [3, 3])
+                conv1: Conv2dConfig::new([64, 64], [3, 3])
                     .with_padding(nn::PaddingConfig2d::Same)
                     .init(device),
-                batch1: BatchNormConfig::new(256).init(device),
-                conv2: Conv2dConfig::new([256, 256], [3, 3])
+                batch1: BatchNormConfig::new(64).init(device),
+                conv2: Conv2dConfig::new([64, 64], [3, 3])
                     .with_padding(nn::PaddingConfig2d::Same)
                     .init(device),
-                batch2: BatchNormConfig::new(256).init(device),
+                batch2: BatchNormConfig::new(64).init(device),
                 activation: Relu::new(),
             }),
-            conv2: Conv2dConfig::new([256, 2], [1, 1])
+            conv2: Conv2dConfig::new([64, 8], [1, 1])
                 .with_padding(nn::PaddingConfig2d::Same)
                 .init(device),
-            batch2: BatchNormConfig::new(2).init(device),
-            linear: LinearConfig::new(128, UciMoveId::TOTAL as usize).init(device),
+            batch2: BatchNormConfig::new(8).init(device),
+            linear: LinearConfig::new(8 * 64, UciMoveId::TOTAL as usize).init(device),
             activation: Relu::new(),
         }
     }
@@ -73,7 +73,7 @@ impl<B: Backend> Model<B> {
         let x = self.conv2.forward(x);
         let x = self.batch2.forward(x);
         let x = self.activation.forward(x);
-        let x = x.reshape([batch_size, 2 * 64]);
+        let x = x.reshape([batch_size, 8 * 64]);
 
         self.linear.forward(x)
     }
