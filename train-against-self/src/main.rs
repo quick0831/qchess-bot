@@ -11,7 +11,7 @@ use qchess_bot::{
     model::{Model, ModelConfig},
 };
 use rand::seq::IndexedRandom;
-use shakmaty::{Chess, Color, Outcome, Position};
+use shakmaty::{Chess, Color, KnownOutcome, Outcome, Position};
 
 fn main() {
     cfg_select! {
@@ -63,7 +63,7 @@ fn main() {
                     // punish for being captured
                     black_reward -= 0.05;
                 }
-                chess.play_unchecked(&white_action);
+                chess.play_unchecked(white_action);
                 if chess.is_check() {
                     // reward for checking the opposing king
                     white_reward += 0.2;
@@ -73,7 +73,7 @@ fn main() {
                 if let Some(ref mut game_black) = game_black {
                     game_black.get_feedback(chess.clone(), black_reward);
                 }
-                if let Some(outcome) = chess.outcome() {
+                if let Outcome::Known(outcome) = chess.outcome() {
                     break (
                         game_white.game_end(),
                         game_black.map(|g| g.game_end()),
@@ -92,7 +92,7 @@ fn main() {
                     // punish for being captured
                     white_reward -= 0.05;
                 }
-                chess.play_unchecked(&black_action);
+                chess.play_unchecked(black_action);
                 // reward for capturing
                 if black_action.is_capture() {
                     black_reward += 0.05;
@@ -104,7 +104,7 @@ fn main() {
                     black_reward += 0.2;
                 }
                 game_white.get_feedback(chess.clone(), white_reward);
-                if let Some(outcome) = chess.outcome() {
+                if let Outcome::Known(outcome) = chess.outcome() {
                     break (
                         game_white.game_end(),
                         Some(game_black.unwrap().game_end()),
@@ -116,19 +116,19 @@ fn main() {
                     break (
                         game_white.game_end(),
                         Some(game_black.unwrap().game_end()),
-                        Outcome::Draw,
+                        KnownOutcome::Draw,
                     );
                 }
             };
             println!("Fullmoves: {:3}, Result: {}", chess.fullmoves(), outcome);
             let (white_final_reward, black_final_reward) = match outcome {
-                Outcome::Decisive {
+                KnownOutcome::Decisive {
                     winner: Color::White,
                 } => (1.0, -1.0),
-                Outcome::Decisive {
+                KnownOutcome::Decisive {
                     winner: Color::Black,
                 } => (-1.0, 1.0),
-                Outcome::Draw => (-0.1, -0.1),
+                KnownOutcome::Draw => (-0.1, -0.1),
             };
             agent.collect_trajectory(white_trajectory, white_final_reward);
             if let Some(black_trajectory) = black_trajectory {
@@ -146,25 +146,25 @@ fn main() {
             while !games.is_empty() {
                 let output = agent.inference(&games, &device);
                 for (idx, game) in games.iter_mut().enumerate() {
-                    game.play_unchecked(&output[idx]);
-                    if game.outcome().is_some() {
+                    game.play_unchecked(output[idx]);
+                    if let Outcome::Known(_) = game.outcome() {
                         continue;
                     }
-                    let black_action = game.legal_moves().choose(&mut rng).unwrap().clone();
-                    game.play_unchecked(&black_action);
+                    let black_action = *game.legal_moves().choose(&mut rng).unwrap();
+                    game.play_unchecked(black_action);
                 }
                 games.retain(|game| {
-                    if let Some(outcome) = game.outcome() {
+                    if let Outcome::Known(outcome) = game.outcome() {
                         match outcome {
-                            Outcome::Decisive {
+                            KnownOutcome::Decisive {
                                 winner: Color::White,
                             } => {
                                 wins += 1;
                             }
-                            Outcome::Decisive {
+                            KnownOutcome::Decisive {
                                 winner: Color::Black,
                             } => {}
-                            Outcome::Draw => {
+                            KnownOutcome::Draw => {
                                 draws += 1;
                             }
                         }

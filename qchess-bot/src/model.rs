@@ -15,10 +15,10 @@ pub struct ModelConfig {}
 #[derive(Module, Debug)]
 pub struct Model<B: Backend> {
     conv1: Conv2d<B>,
-    batch1: BatchNorm<B, 2>,
+    batch1: BatchNorm<B>,
     residual: [ResBlock<B>; 10],
     conv2: Conv2d<B>,
-    batch2: BatchNorm<B, 2>,
+    batch2: BatchNorm<B>,
     linear: Linear<B>,
     activation: Relu,
 }
@@ -26,9 +26,9 @@ pub struct Model<B: Backend> {
 #[derive(Module, Debug)]
 struct ResBlock<B: Backend> {
     conv1: Conv2d<B>,
-    batch1: BatchNorm<B, 2>,
+    batch1: BatchNorm<B>,
     conv2: Conv2d<B>,
-    batch2: BatchNorm<B, 2>,
+    batch2: BatchNorm<B>,
     activation: Relu,
 }
 

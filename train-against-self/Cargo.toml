@@ -5,9 +5,9 @@ edition = "2024"
 
 [dependencies]
 qchess-bot = { path = "../qchess-bot" }
-burn = { version = "0.18.0", features = ["train"] }
-shakmaty = "0.27.3"
-rand = "0.9.1"
+burn = { version = "0.21.0", features = ["train"] }
+shakmaty = "0.30.1"
+rand = "0.10.2"
 
 [features]
 default = ["wgpu"]

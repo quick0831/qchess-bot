@@ -7,7 +7,7 @@ use burn::{
 };
 use nn::loss::MseLoss;
 use rand::{
-    Rng,
+    RngExt as _,
     distr::{Distribution, weighted::WeightedIndex},
     seq::IndexedRandom,
 };
@@ -88,8 +88,7 @@ impl<B: Backend> GameSession<'_, '_, B> {
     pub fn make_action(&mut self) -> Move {
         let picked_move = self
             .agent
-            .inference(std::slice::from_ref(&self.state), self.device)[0]
-            .clone();
+            .inference(std::slice::from_ref(&self.state), self.device)[0];
         self.last_move = Some(UciMoveId::from_move(&picked_move).u16());
         picked_move
     }
@@ -141,7 +140,7 @@ impl<B: Backend> Agent<B> {
         let mut rng = rand::rng();
         let amount = rng.random_range(30..50);
         if amount < trajectory.len() {
-            let samples = trajectory.as_slice().choose_multiple(&mut rng, amount);
+            let samples = trajectory.as_slice().sample(&mut rng, amount);
             self.memory.extend(samples.cloned());
         } else {
             self.memory.append(&mut trajectory);
@@ -181,7 +180,7 @@ impl<B: Backend> Agent<B> {
             let legal_moves = game.legal_moves();
             let weights = legal_moves
                 .iter()
-                .map(|m| if is_black { m.to_mirrored() } else { m.clone() })
+                .map(|m| if is_black { m.to_mirrored() } else { *m })
                 .map(|m| UciMoveId::from_move(&m))
                 .map(|id| data[id.u16() as usize])
                 .map(f32::exp)
@@ -190,7 +189,7 @@ impl<B: Backend> Agent<B> {
                 .collect::<Vec<_>>();
             let dist = WeightedIndex::new(weights).unwrap();
             let mut rng = rand::rng();
-            let picked_move = legal_moves[dist.sample(&mut rng)].clone();
+            let picked_move = legal_moves[dist.sample(&mut rng)];
 
             // take the move
             picked_moves.push(picked_move);

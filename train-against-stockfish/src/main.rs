@@ -6,7 +6,10 @@ use qchess_bot::{
     agent::Agent,
     model::{Model, ModelConfig},
 };
-use shakmaty::{Chess, Color, Outcome, Position, fen::Fen, san::SanPlus, uci::UciMove};
+use shakmaty::{
+    Chess, Color, EnPassantMode, KnownOutcome, Outcome, Position, fen::Fen, san::SanPlus,
+    uci::UciMove,
+};
 use uciengine::uciengine::*;
 
 #[tokio::main(flavor = "current_thread")]
@@ -37,18 +40,16 @@ async fn main() {
                 if action.is_capture() {
                     reward += 0.05;
                 }
-                let white_move = SanPlus::from_move(chess.clone(), &action);
-                chess.play_unchecked(&action);
+                let white_move = SanPlus::from_move(chess.clone(), action);
+                chess.play_unchecked(action);
                 // reward for checking the opposing king
-                if let Some(outcome) = chess.outcome() {
+                if let Outcome::Known(outcome) = chess.outcome() {
                     break (game.game_end(), outcome);
                 }
                 if chess.is_check() {
                     reward += 0.05;
                 }
-                let fen =
-                    Fen::from_setup(chess.clone().into_setup(shakmaty::EnPassantMode::Always))
-                        .to_string();
+                let fen = Fen::from_position(&chess, EnPassantMode::Legal).to_string();
                 let go_job = GoJob::new()
                     .uci_opt("UCI_LimitStrength", "true")
                     .pos_fen(fen)
@@ -56,8 +57,8 @@ async fn main() {
                 let engine_move = engine.go(go_job).await.unwrap();
                 let engine_move: UciMove = engine_move.bestmove.unwrap().parse().unwrap();
                 let engine_move = engine_move.to_move(&chess).unwrap();
-                let black_move = SanPlus::from_move(chess.clone(), &engine_move);
-                chess.play_unchecked(&engine_move);
+                let black_move = SanPlus::from_move(chess.clone(), engine_move);
+                chess.play_unchecked(engine_move);
                 // punish for being checked
                 if chess.is_check() {
                     reward -= 0.05;
@@ -70,19 +71,19 @@ async fn main() {
                     reward,
                 );
                 game.get_feedback(chess.clone(), reward);
-                if let Some(outcome) = chess.outcome() {
+                if let Outcome::Known(outcome) = chess.outcome() {
                     break (game.game_end(), outcome);
                 }
             };
             println!("{:?}", chess.outcome());
             let final_reward = match outcome {
-                Outcome::Decisive {
+                KnownOutcome::Decisive {
                     winner: Color::White,
                 } => 1.0,
-                Outcome::Decisive {
+                KnownOutcome::Decisive {
                     winner: Color::Black,
                 } => -1.0,
-                Outcome::Draw => -0.1,
+                KnownOutcome::Draw => -0.1,
             };
             agent.collect_trajectory(trajectory, final_reward);
         }
