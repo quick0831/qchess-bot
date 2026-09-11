@@ -23,7 +23,7 @@ pub struct Agent<B: Backend> {
 pub struct GameSession<'d, 'a, B: Backend> {
     trajectory: Vec<Record>,
     state: Chess,
-    last_move: Option<u16>,
+    last_move: Option<UciMoveId>,
     device: &'d B::Device,
     agent: &'a Agent<B>,
 }
@@ -33,7 +33,7 @@ pub struct Trajectory(Vec<Record>);
 #[derive(Debug, Clone)]
 pub struct Record {
     state: Chess,
-    action: u16,
+    action: UciMoveId,
     reward: f32,
 }
 
@@ -89,7 +89,7 @@ impl<B: Backend> GameSession<'_, '_, B> {
         let picked_move = self
             .agent
             .inference(std::slice::from_ref(&self.state), self.device)[0];
-        self.last_move = Some(UciMoveId::from_move(&picked_move).u16());
+        self.last_move = Some(UciMoveId::from_move(&picked_move));
         picked_move
     }
 
@@ -208,7 +208,7 @@ impl<B: AutodiffBackend> Agent<B> {
     ) {
         let (states, (actions, rewards)): (Vec<_>, (Vec<_>, Vec<_>)) = take(&mut self.memory)
             .into_iter()
-            .map(|record| (record.state, (record.action, record.reward)))
+            .map(|record| (record.state, (record.action.u16(), record.reward)))
             .unzip();
         let model_input = chess_to_tensor(&states, device);
         let model_output = self.model.forward(model_input);
