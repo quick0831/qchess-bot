@@ -214,7 +214,7 @@ impl<B: AutodiffBackend> Agent<B> {
         let model_input = chess_to_tensor(&states, device);
         let model_output = self.model.forward(model_input);
         let targets: Tensor<B, 1> = Tensor::from_floats(actions.as_slice(), device);
-        let targets = targets.one_hot(4096).detach();
+        let targets = targets.one_hot(UciMoveId::TOTAL as usize).detach();
         let rewards = Tensor::from_floats(rewards.as_slice(), device).detach();
         let grads = MseLoss::new()
             .forward(model_output, targets, nn::loss::Reduction::Mean)
