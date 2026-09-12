@@ -9,6 +9,7 @@ use burn::{
 use qchess_bot::{
     agent::{Agent, GameSession},
     model::{Model, ModelConfig},
+    replay::GameFlag,
 };
 use rand::seq::IndexedRandom;
 use shakmaty::{Chess, Color, KnownOutcome, Outcome, Position};
@@ -71,7 +72,11 @@ fn main() {
                     black_reward -= 0.2;
                 }
                 if let Some(ref mut game_black) = game_black {
-                    game_black.get_feedback(chess.clone(), black_reward);
+                    let flag = match chess.outcome() {
+                        Outcome::Known(_) => GameFlag::Terminated,
+                        Outcome::Unknown => GameFlag::Nothing,
+                    };
+                    game_black.get_feedback(chess.clone(), black_reward, flag);
                 }
                 if let Outcome::Known(outcome) = chess.outcome() {
                     break (
@@ -103,7 +108,11 @@ fn main() {
                     // reward for checking the opposing king
                     black_reward += 0.2;
                 }
-                game_white.get_feedback(chess.clone(), white_reward);
+                let flag = match chess.outcome() {
+                    Outcome::Known(_) => GameFlag::Terminated,
+                    Outcome::Unknown => GameFlag::Nothing,
+                };
+                game_white.get_feedback(chess.clone(), white_reward, flag);
                 if let Outcome::Known(outcome) = chess.outcome() {
                     break (
                         game_white.game_end(),

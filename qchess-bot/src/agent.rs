@@ -1,4 +1,4 @@
-use std::mem::{replace, take};
+use std::mem::replace;
 
 use burn::{
     optim::{GradientsParams, Optimizer},
@@ -7,35 +7,31 @@ use burn::{
 };
 use nn::loss::MseLoss;
 use rand::{
-    RngExt as _,
     distr::{Distribution, weighted::WeightedIndex},
     seq::IndexedRandom,
 };
 use shakmaty::{Bitboard, Chess, Color, Move, Position};
 
-use crate::{encode::UciMoveId, model::Model};
+use crate::{
+    encode::UciMoveId,
+    model::Model,
+    replay::{GameFlag, ReplayBuffer, Transition},
+};
 
 pub struct Agent<B: Backend> {
-    memory: Vec<Record>,
+    memory: ReplayBuffer,
     model: Model<B>,
 }
 
 pub struct GameSession<'d, 'a, B: Backend> {
-    trajectory: Vec<Record>,
+    trajectory: Vec<Transition>,
     state: Chess,
     last_move: Option<UciMoveId>,
     device: &'d B::Device,
     agent: &'a Agent<B>,
 }
 
-pub struct Trajectory(Vec<Record>);
-
-#[derive(Debug, Clone)]
-pub struct Record {
-    state: Chess,
-    action: UciMoveId,
-    reward: f32,
-}
+pub struct Trajectory(Vec<Transition>);
 
 fn chess_to_tensor<B: Backend>(chess: &[Chess], device: &B::Device) -> Tensor<B, 4> {
     let bitboard_to_arr = |mut b: Bitboard| -> [[f32; 8]; 8] {
@@ -93,13 +89,14 @@ impl<B: Backend> GameSession<'_, '_, B> {
         picked_move
     }
 
-    pub fn get_feedback(&mut self, next_state: Chess, reward: f32) {
+    pub fn get_feedback(&mut self, next_state: Chess, reward: f32, flag: GameFlag) {
         let state = replace(&mut self.state, next_state);
         if let Some(last_move) = self.last_move.take() {
-            self.trajectory.push(Record {
+            self.trajectory.push(Transition {
                 state,
                 action: last_move,
                 reward,
+                flag,
             });
         }
     }
@@ -111,7 +108,7 @@ impl<B: Backend> GameSession<'_, '_, B> {
 
 impl<B: Backend> Agent<B> {
     pub fn new(model: Model<B>) -> Self {
-        let memory = Vec::new();
+        let memory = ReplayBuffer::new(10000);
         Agent { memory, model }
     }
 
@@ -137,13 +134,8 @@ impl<B: Backend> Agent<B> {
             delayed_reward = record.reward + delayed_reward * decay;
             record.reward = delayed_reward;
         }
-        let mut rng = rand::rng();
-        let amount = rng.random_range(30..50);
-        if amount < trajectory.len() {
-            let samples = trajectory.as_slice().sample(&mut rng, amount);
-            self.memory.extend(samples.cloned());
-        } else {
-            self.memory.append(&mut trajectory);
+        for transition in trajectory {
+            self.memory.push(transition);
         }
     }
 
@@ -206,8 +198,11 @@ impl<B: AutodiffBackend> Agent<B> {
         optim: &mut impl Optimizer<Model<B>, B>,
         lr: f64,
     ) {
-        let (states, (actions, rewards)): (Vec<_>, (Vec<_>, Vec<_>)) = take(&mut self.memory)
-            .into_iter()
+        let mut rng = rand::rng();
+        let (states, (actions, rewards)): (Vec<_>, (Vec<_>, Vec<_>)) = self
+            .memory
+            .sample(&mut rng, 32)
+            .cloned()
             .map(|record| (record.state, (record.action.u16(), record.reward)))
             .unzip();
         let model_input = chess_to_tensor(&states, device);

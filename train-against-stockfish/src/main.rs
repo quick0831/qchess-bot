@@ -5,6 +5,7 @@ use burn::{
 use qchess_bot::{
     agent::Agent,
     model::{Model, ModelConfig},
+    replay::GameFlag,
 };
 use shakmaty::{
     Chess, Color, EnPassantMode, KnownOutcome, Outcome, Position, fen::Fen, san::SanPlus,
@@ -70,7 +71,11 @@ async fn main() {
                     black_move,
                     reward,
                 );
-                game.get_feedback(chess.clone(), reward);
+                let flag = match chess.outcome() {
+                    Outcome::Known(_) => GameFlag::Terminated,
+                    Outcome::Unknown => GameFlag::Nothing,
+                };
+                game.get_feedback(chess.clone(), reward, flag);
                 if let Outcome::Known(outcome) = chess.outcome() {
                     break (game.game_end(), outcome);
                 }
