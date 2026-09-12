@@ -1,5 +1,3 @@
-use std::cmp::Ordering;
-
 use shakmaty::{
     CastlingMode, File, Move, Position, Rank, Role, Square,
     uci::{IllegalUciMoveError, UciMove},
@@ -12,11 +10,11 @@ impl UciMoveId {
     /// The total amount of possible UciMoveId
     pub const TOTAL: u16 = 1880;
 
-    pub fn u16(&self) -> u16 {
+    pub const fn u16(&self) -> u16 {
         self.0
     }
 
-    pub fn new(id: u16) -> Option<UciMoveId> {
+    pub const fn new(id: u16) -> Option<UciMoveId> {
         if id < Self::TOTAL {
             Some(Self(id))
         } else {
@@ -32,7 +30,7 @@ impl UciMoveId {
         self.to_uci().to_move(pos)
     }
 
-    pub fn from_uci(uci: UciMove) -> Option<Self> {
+    pub const fn from_uci(uci: UciMove) -> Option<Self> {
         let UciMove::Normal {
             from,
             to,
@@ -51,13 +49,13 @@ impl UciMoveId {
                 _ => unreachable!(),
             };
             let from_file = from.file();
-            let file_id = match from_file.cmp(&to.file()) {
+            let file_id = match (from_file as i8) - (to.file() as i8) {
                 // promotion
-                Ordering::Equal => 0,
+                0 => 0,
                 // take promote towards king-side
-                Ordering::Less => 8,
+                ..0 => 8,
                 // take promote towards queen-side
-                Ordering::Greater => 14,
+                1.. => 14,
             } + from_file as u16;
             1792 + 4 * file_id + promotion_id
         } else {
@@ -128,10 +126,10 @@ impl UciMoveId {
         Some(Self(id))
     }
 
-    pub fn to_uci(&self) -> UciMove {
+    pub const fn to_uci(&self) -> UciMove {
         let id = self.0;
 
-        let diag = |id: u16, len: u16, f: u32, r: u32| {
+        const fn diag(id: u16, len: u16, f: u32, r: u32) -> UciMove {
             let x = id / len;
             let y = id % len;
             let y = y + if y >= x { 1 } else { 0 };
@@ -146,9 +144,9 @@ impl UciMoveId {
                 to,
                 promotion: None,
             }
-        };
+        }
 
-        let diag2 = |id: u16, len: u16, f: u32, r: u32| {
+        const fn diag2(id: u16, len: u16, f: u32, r: u32) -> UciMove {
             let x = id / len;
             let y = id % len;
             let y = y + if y >= x { 1 } else { 0 };
@@ -163,9 +161,9 @@ impl UciMoveId {
                 to,
                 promotion: None,
             }
-        };
+        }
 
-        let knight = |id: u16, l: i16, f: i16, r: i16| {
+        const fn knight(id: u16, l: i16, f: i16, r: i16) -> UciMove {
             let id = id as i16;
             let x = id / l - if f < 0 { f } else { 0 };
             let y = id % l - if r < 0 { r } else { 0 };
@@ -180,7 +178,7 @@ impl UciMoveId {
                 to,
                 promotion: None,
             }
-        };
+        }
 
         match id {
             0..448 => {
