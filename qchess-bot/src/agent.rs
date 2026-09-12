@@ -6,10 +6,7 @@ use burn::{
     tensor::backend::AutodiffBackend,
 };
 use nn::loss::MseLoss;
-use rand::{
-    distr::{Distribution, weighted::WeightedIndex},
-    seq::IndexedRandom,
-};
+use rand::seq::IndexedRandom;
 use shakmaty::{Bitboard, Chess, Color, Move, Position};
 
 use crate::{
@@ -166,22 +163,19 @@ impl<B: Backend> Agent<B> {
                 .into_data()
                 .into_vec()
                 .unwrap();
-
-            // pick a random move base on weight
             let is_black = game.turn() == Color::Black;
             let legal_moves = game.legal_moves();
-            let weights = legal_moves
-                .iter()
-                .map(|m| if is_black { m.to_mirrored() } else { *m })
-                .map(|m| UciMoveId::from_move(&m))
-                .map(|id| data[id.u16() as usize])
-                .map(f32::exp)
-                // clip values to avoid infinite and 0
-                .map(|w| w.clamp(0.01, 1e25))
-                .collect::<Vec<_>>();
-            let dist = WeightedIndex::new(weights).unwrap();
-            let mut rng = rand::rng();
-            let picked_move = legal_moves[dist.sample(&mut rng)];
+            let picked_move = legal_moves
+                .into_iter()
+                .map(|m| {
+                    let flipped = if is_black { m.to_mirrored() } else { m };
+                    let id = UciMoveId::from_move(&flipped);
+                    let q_score = data[id.u16() as usize];
+                    (m, q_score)
+                })
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                .map(|(m, _)| m)
+                .expect("No valid move");
 
             // take the move
             picked_moves.push(picked_move);
