@@ -1,5 +1,7 @@
 #![recursion_limit = "256"]
 
+use std::mem::take;
+
 use burn::{
     backend::Autodiff,
     module::Module,
@@ -7,9 +9,10 @@ use burn::{
     record::{FullPrecisionSettings, NamedMpkFileRecorder},
 };
 use qchess_bot::{
-    agent::{Agent, GameSession},
+    encode::UciMoveId,
     model::{Model, ModelConfig},
-    replay::GameFlag,
+    replay::{GameFlag, Transition},
+    train::{Trainer, TrainerConfig},
 };
 use rand::seq::IndexedRandom;
 use shakmaty::{Chess, Color, KnownOutcome, Outcome, Position};
@@ -43,108 +46,71 @@ fn main() {
 
     println!("{model}");
 
-    let mut agent = Agent::new(model);
+    let trainer_config = TrainerConfig::default();
+    let mut trainer = Trainer::new(model, &device, trainer_config);
 
     let mut optim = AdamConfig::new().init();
     let lr = 0.0001;
+    let epsilon = 0.5;
     for epoch in 0..2000 {
         println!("epoch: {:5}", epoch + 1);
-        while agent.get_memory_len() < 200 {
-            let mut chess = Chess::new();
-            let mut game_white = agent.start_new_game(chess.clone(), &device);
-            let mut game_black: Option<GameSession<_>> = None;
-            let mut white_reward;
-            let mut black_reward = 0.0;
-            let (white_trajectory, black_trajectory, outcome) = loop {
-                white_reward = 0.1 + -0.002 * chess.fullmoves().get() as f32; // punish for making the game long
-                let white_action = game_white.make_action();
-                if white_action.is_capture() {
-                    // reward for capturing
-                    white_reward += 0.05;
-                    // punish for being captured
-                    black_reward -= 0.05;
-                }
-                chess.play_unchecked(white_action);
-                if chess.is_check() {
-                    // reward for checking the opposing king
-                    white_reward += 0.2;
-                    // punish for being checked
-                    black_reward -= 0.2;
-                }
-                if let Some(ref mut game_black) = game_black {
-                    let flag = match chess.outcome() {
-                        Outcome::Known(_) => GameFlag::Terminated,
-                        Outcome::Unknown => GameFlag::Nothing,
+        let mut train_counter = 0;
+        while train_counter < 10 {
+            let mut games = vec![Chess::new(); 10];
+            let mut finished_games = Vec::new();
+            while !games.is_empty() {
+                let actions = trainer.make_move(&games, epsilon);
+                for (mut game, action) in take(&mut games).into_iter().zip(actions) {
+                    let mut reward = 0.0 + -0.002 * game.fullmoves().get() as f32; // punish for making the game long
+                    if action.is_capture() {
+                        // reward for capturing
+                        reward += 0.1;
+                    }
+                    game.play_unchecked(action);
+                    if game.is_check() {
+                        // reward for checking the opposing king
+                        reward += 0.1;
+                    }
+                    // Stop the session if the game is too long
+                    let flag = match game.outcome() {
+                        Outcome::Known(outcome) => {
+                            reward += match outcome {
+                                KnownOutcome::Decisive { winner: _ } => 1.,
+                                KnownOutcome::Draw => -0.3,
+                            };
+                            GameFlag::Terminated
+                        }
+                        Outcome::Unknown => match game.fullmoves().get() {
+                            250.. => GameFlag::Truncated,
+                            _ => GameFlag::Nothing,
+                        },
                     };
-                    game_black.get_feedback(chess.clone(), black_reward, flag);
+                    trainer.record(Transition {
+                        state: game.clone(),
+                        action: UciMoveId::from_move(&action),
+                        reward,
+                        flag,
+                    });
+                    if flag == GameFlag::Nothing {
+                        games.push(game);
+                    } else {
+                        finished_games.push(game);
+                    }
                 }
-                if let Outcome::Known(outcome) = chess.outcome() {
-                    break (
-                        game_white.game_end(),
-                        game_black.map(|g| g.game_end()),
-                        outcome,
-                    );
-                }
-
-                black_reward = 0.1 + -0.002 * chess.fullmoves().get() as f32; // punish for making the game long
-                if game_black.is_none() {
-                    game_black = Some(agent.start_new_game(chess.clone(), &device));
-                }
-                let black_action = game_black.as_mut().unwrap().make_action();
-                if black_action.is_capture() {
-                    // reward for capturing
-                    black_reward += 0.05;
-                    // punish for being captured
-                    white_reward -= 0.05;
-                }
-                chess.play_unchecked(black_action);
-                // reward for capturing
-                if black_action.is_capture() {
-                    black_reward += 0.05;
-                }
-                if chess.is_check() {
-                    // punish for being checked
-                    white_reward -= 0.2;
-                    // reward for checking the opposing king
-                    black_reward += 0.2;
-                }
-                let flag = match chess.outcome() {
-                    Outcome::Known(_) => GameFlag::Terminated,
-                    Outcome::Unknown => GameFlag::Nothing,
-                };
-                game_white.get_feedback(chess.clone(), white_reward, flag);
-                if let Outcome::Known(outcome) = chess.outcome() {
-                    break (
-                        game_white.game_end(),
-                        Some(game_black.unwrap().game_end()),
-                        outcome,
-                    );
-                }
-                // Stop the session if the game is too long
-                if chess.fullmoves().get() > 250 {
-                    break (
-                        game_white.game_end(),
-                        Some(game_black.unwrap().game_end()),
-                        KnownOutcome::Draw,
-                    );
-                }
-            };
-            println!("Fullmoves: {:3}, Result: {}", chess.fullmoves(), outcome);
-            let (white_final_reward, black_final_reward) = match outcome {
-                KnownOutcome::Decisive {
-                    winner: Color::White,
-                } => (1.0, -1.0),
-                KnownOutcome::Decisive {
-                    winner: Color::Black,
-                } => (-1.0, 1.0),
-                KnownOutcome::Draw => (-0.1, -0.1),
-            };
-            agent.collect_trajectory(white_trajectory, white_final_reward);
-            if let Some(black_trajectory) = black_trajectory {
-                agent.collect_trajectory(black_trajectory, black_final_reward);
+            }
+            for (idx, game) in games.iter().enumerate() {
+                println!(
+                    "[{:2}] Fullmoves: {:3}, Result: {}",
+                    idx,
+                    game.fullmoves(),
+                    game.outcome()
+                );
+            }
+            if trainer.step_counter() {
+                trainer.train(&mut optim, lr);
+                train_counter += 1;
             }
         }
-        agent.train_model(&device, &mut optim, lr);
 
         // run evaluation against random
         if (epoch + 1) % 10 == 0 {
@@ -153,7 +119,7 @@ fn main() {
             let mut games = vec![Chess::new(); 10];
             let mut rng = rand::rng();
             while !games.is_empty() {
-                let output = agent.inference(&games, &device);
+                let output = trainer.make_move(&games, 0.);
                 for (idx, game) in games.iter_mut().enumerate() {
                     game.play_unchecked(output[idx]);
                     if let Outcome::Known(_) = game.outcome() {
@@ -161,6 +127,9 @@ fn main() {
                     }
                     let black_action = *game.legal_moves().choose(&mut rng).unwrap();
                     game.play_unchecked(black_action);
+                    if let Outcome::Known(_) = game.outcome() {
+                        continue;
+                    }
                 }
                 games.retain(|game| {
                     if let Outcome::Known(outcome) = game.outcome() {
@@ -194,8 +163,9 @@ fn main() {
     // Save model in MessagePack format with full precision
     let model_path = "model";
     let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
-    agent
-        .into_model()
+    trainer
+        .model()
+        .clone()
         .save_file(model_path, &recorder)
         .expect("Should be able to save the model");
 }

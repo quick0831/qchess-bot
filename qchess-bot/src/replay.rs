@@ -5,7 +5,7 @@ use shakmaty::Chess;
 
 use crate::encode::UciMoveId;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GameFlag {
     // The game will continue
     Nothing,
