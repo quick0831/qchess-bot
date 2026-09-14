@@ -1,7 +1,7 @@
 use burn::{
     nn::{
-        BatchNorm, BatchNormConfig, Linear, LinearConfig, Relu,
         conv::{Conv2d, Conv2dConfig},
+        BatchNorm, BatchNormConfig, Linear, LinearConfig, Relu,
     },
     prelude::*,
 };
@@ -92,6 +92,11 @@ impl<B: Backend> ResBlock<B> {
 
 impl<B: Backend> Model<B> {
     pub fn inference(&self, games: &[Chess], device: &B::Device) -> Vec<Move> {
+        // empty input tensor crashes the model
+        if games.is_empty() {
+            return Vec::new();
+        }
+
         // generate input for model
         let input_tensor: Tensor<B, 4> = chess_to_tensor(games, device);
 
