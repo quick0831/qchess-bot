@@ -1006,6 +1006,7 @@ dependencies = [
  "aligned-vec",
  "bon",
  "burn-cubecl",
+ "burn-flex",
  "burn-ir",
  "burn-tch",
  "burn-tensor",

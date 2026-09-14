@@ -12,6 +12,7 @@ rand = "0.10.2"
 [features]
 default = ["wgpu"]
 cpu = ["burn/ndarray"]
+flex = ["burn/flex"]
 wgpu = ["burn/wgpu"]
 cuda = ["burn/cuda"]
 tch = ["burn/tch"]

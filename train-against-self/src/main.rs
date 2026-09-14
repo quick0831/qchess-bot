@@ -31,6 +31,9 @@ fn main() {
         feature = "cpu" => {
             type MyBackend = Autodiff<burn::backend::NdArray<f32, i32>>;
         }
+        feature = "flex" => {
+            type MyBackend = Autodiff<burn::backend::Flex<f32, i32>>;
+        }
     }
 
     let device = cfg_select! {
@@ -38,6 +41,7 @@ fn main() {
         feature = "cuda" => Default::default(),
         feature = "tch" => burn::backend::libtorch::LibTorchDevice::Cuda(0),
         feature = "cpu" => Default::default(),
+        feature = "flex" => Default::default(),
     };
 
     let model_config = ModelConfig {};
