@@ -1,7 +1,7 @@
 use burn::{
     nn::{
-        conv::{Conv2d, Conv2dConfig},
         BatchNorm, BatchNormConfig, Linear, LinearConfig, Relu,
+        conv::{Conv2d, Conv2dConfig},
     },
     prelude::*,
 };
@@ -13,27 +13,27 @@ use crate::encode::UciMoveId;
 pub struct ModelConfig {}
 
 #[derive(Module, Debug)]
-pub struct Model<B: Backend> {
-    conv1: Conv2d<B>,
-    batch1: BatchNorm<B>,
-    residual: [ResBlock<B>; 10],
-    conv2: Conv2d<B>,
-    batch2: BatchNorm<B>,
-    linear: Linear<B>,
+pub struct Model {
+    conv1: Conv2d,
+    batch1: BatchNorm,
+    residual: [ResBlock; 10],
+    conv2: Conv2d,
+    batch2: BatchNorm,
+    linear: Linear,
     activation: Relu,
 }
 
 #[derive(Module, Debug)]
-struct ResBlock<B: Backend> {
-    conv1: Conv2d<B>,
-    batch1: BatchNorm<B>,
-    conv2: Conv2d<B>,
-    batch2: BatchNorm<B>,
+struct ResBlock {
+    conv1: Conv2d,
+    batch1: BatchNorm,
+    conv2: Conv2d,
+    batch2: BatchNorm,
     activation: Relu,
 }
 
 impl ModelConfig {
-    pub fn init<B: Backend>(&self, device: &B::Device) -> Model<B> {
+    pub fn init(&self, device: &Device) -> Model {
         Model {
             conv1: Conv2dConfig::new([13, 64], [3, 3])
                 .with_padding(nn::PaddingConfig2d::Same)
@@ -60,8 +60,8 @@ impl ModelConfig {
     }
 }
 
-impl<B: Backend> Model<B> {
-    pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 2> {
+impl Model {
+    pub fn forward(&self, input: Tensor<4>) -> Tensor<2> {
         let [batch_size, ..] = input.dims();
 
         let x = self.conv1.forward(input);
@@ -79,8 +79,8 @@ impl<B: Backend> Model<B> {
     }
 }
 
-impl<B: Backend> ResBlock<B> {
-    pub fn forward(&self, input: Tensor<B, 4>) -> Tensor<B, 4> {
+impl ResBlock {
+    pub fn forward(&self, input: Tensor<4>) -> Tensor<4> {
         let x = self.conv1.forward(input.clone());
         let x = self.batch1.forward(x);
         let x = self.activation.forward(x);
@@ -90,15 +90,15 @@ impl<B: Backend> ResBlock<B> {
     }
 }
 
-impl<B: Backend> Model<B> {
-    pub fn inference(&self, games: &[Chess], device: &B::Device) -> Vec<Move> {
+impl Model {
+    pub fn inference(&self, games: &[Chess], device: &Device) -> Vec<Move> {
         // empty input tensor crashes the model
         if games.is_empty() {
             return Vec::new();
         }
 
         // generate input for model
-        let input_tensor: Tensor<B, 4> = chess_to_tensor(games, device);
+        let input_tensor: Tensor<4> = chess_to_tensor(games, device);
 
         // run the model
         let output_tensor = self.forward(input_tensor);
@@ -109,7 +109,7 @@ impl<B: Backend> Model<B> {
                 .clone()
                 .slice(s![idx, ..])
                 .into_data()
-                .into_vec()
+                .try_into_vec()
                 .unwrap();
             let is_black = game.turn() == Color::Black;
             let legal_moves = game.legal_moves();
@@ -133,7 +133,7 @@ impl<B: Backend> Model<B> {
     }
 }
 
-pub fn chess_to_tensor<B: Backend>(games: &[Chess], device: &B::Device) -> Tensor<B, 4> {
+pub fn chess_to_tensor(games: &[Chess], device: &Device) -> Tensor<4> {
     let bitboard_to_arr = |mut b: Bitboard| -> [[f32; 8]; 8] {
         let mut arr = [[0.0; 8]; 8];
         while let Some(sq) = b.pop_back() {
@@ -177,5 +177,5 @@ pub fn chess_to_tensor<B: Backend>(games: &[Chess], device: &B::Device) -> Tenso
         .flatten()
         .collect();
     let data: &[f32] = &data;
-    Tensor::<B, 1>::from_floats(data, device).reshape([-1, 13, 8, 8])
+    Tensor::<1>::from_floats(data, device).reshape([-1, 13, 8, 8])
 }

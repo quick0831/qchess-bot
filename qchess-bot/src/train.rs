@@ -1,8 +1,7 @@
 use burn::{
     nn::loss::{HuberLossConfig, Reduction},
-    optim::{GradientsParams, Optimizer},
+    optim::{GradientsParams, ModuleOptimizer},
     prelude::*,
-    tensor::backend::AutodiffBackend,
 };
 use rand::{
     distr::{Bernoulli, Distribution},
@@ -34,17 +33,17 @@ impl Default for TrainerConfig {
     }
 }
 
-pub struct Trainer<'d, B: AutodiffBackend> {
-    device: &'d B::Device,
+pub struct Trainer<'d> {
+    device: &'d Device,
     replay_buffer: ReplayBuffer,
-    online_model: Model<B>,
-    target_model: Model<B>,
+    online_model: Model,
+    target_model: Model,
     config: TrainerConfig,
     train_counter: u32,
 }
 
-impl<'d, B: AutodiffBackend> Trainer<'d, B> {
-    pub fn new(model: Model<B>, device: &'d B::Device, config: TrainerConfig) -> Self {
+impl<'d> Trainer<'d> {
+    pub fn new(model: Model, device: &'d Device, config: TrainerConfig) -> Self {
         Self {
             device,
             replay_buffer: ReplayBuffer::new(10000),
@@ -55,7 +54,7 @@ impl<'d, B: AutodiffBackend> Trainer<'d, B> {
         }
     }
 
-    pub fn model(&self) -> &Model<B> {
+    pub fn model(&self) -> &Model {
         &self.online_model
     }
 
@@ -105,7 +104,7 @@ impl<'d, B: AutodiffBackend> Trainer<'d, B> {
         self.train_counter >= self.config.train_frequency
     }
 
-    pub fn train(&mut self, optim: &mut impl Optimizer<Model<B>, B>, lr: f64) {
+    pub fn train(&mut self, optim: &mut ModuleOptimizer, lr: f64) {
         self.train_counter = 0;
         let mut rng = rand::rng();
         let mini_batch = self
@@ -126,8 +125,8 @@ impl<'d, B: AutodiffBackend> Trainer<'d, B> {
             .unzip();
 
         let action = Tensor::from_ints(action.as_slice(), self.device);
-        let reward = Tensor::<B, 1>::from_floats(reward.as_slice(), self.device).reshape([-1, 1]);
-        let terminated = Tensor::<B, 1, Int>::from_ints(terminated.as_slice(), self.device)
+        let reward = Tensor::<1>::from_floats(reward.as_slice(), self.device).reshape([-1, 1]);
+        let terminated = Tensor::<1, Int>::from_ints(terminated.as_slice(), self.device)
             .reshape([-1, 1])
             .float();
         let states = chess_to_tensor(&states, self.device);

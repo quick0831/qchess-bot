@@ -1,7 +1,4 @@
-use burn::{
-    backend::{Autodiff, Wgpu},
-    optim::SgdConfig,
-};
+use burn::{optim::SgdConfig, prelude::*, tensor::Device};
 use qchess_bot::{
     agent::Agent,
     model::{Model, ModelConfig},
@@ -15,12 +12,10 @@ use uciengine::uciengine::*;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    type MyBackend = Autodiff<Wgpu<f32, i32>>;
-
     let model_config = ModelConfig {};
 
-    let device = Default::default();
-    let model: Model<MyBackend> = model_config.init(&device);
+    let device = Device::wgpu(DeviceKind::DefaultDevice);
+    let model: Model = model_config.init(&device);
 
     println!("{model}");
 

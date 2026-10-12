@@ -2,9 +2,8 @@ use std::mem::replace;
 
 use burn::{
     nn::loss::MseLoss,
-    optim::{GradientsParams, Optimizer},
+    optim::{GradientsParams, ModuleOptimizer},
     prelude::*,
-    tensor::backend::AutodiffBackend,
 };
 use rand::seq::IndexedRandom;
 use shakmaty::{Chess, Move};
@@ -15,22 +14,22 @@ use crate::{
     replay::{GameFlag, ReplayBuffer, Transition},
 };
 
-pub struct Agent<B: Backend> {
+pub struct Agent {
     memory: ReplayBuffer,
-    model: Model<B>,
+    model: Model,
 }
 
-pub struct GameSession<'d, 'a, B: Backend> {
+pub struct GameSession<'d, 'a> {
     trajectory: Vec<Transition>,
     state: Chess,
     last_move: Option<UciMoveId>,
-    device: &'d B::Device,
-    agent: &'a Agent<B>,
+    device: &'d Device,
+    agent: &'a Agent,
 }
 
 pub struct Trajectory(Vec<Transition>);
 
-impl<B: Backend> GameSession<'_, '_, B> {
+impl GameSession<'_, '_> {
     pub fn make_action(&mut self) -> Move {
         let picked_move = self
             .agent
@@ -57,8 +56,8 @@ impl<B: Backend> GameSession<'_, '_, B> {
     }
 }
 
-impl<B: Backend> Agent<B> {
-    pub fn new(model: Model<B>) -> Self {
+impl Agent {
+    pub fn new(model: Model) -> Self {
         let memory = ReplayBuffer::new(10000);
         Agent { memory, model }
     }
@@ -66,8 +65,8 @@ impl<B: Backend> Agent<B> {
     pub fn start_new_game<'d>(
         &self,
         initial_state: Chess,
-        device: &'d B::Device,
-    ) -> GameSession<'d, '_, B> {
+        device: &'d Device,
+    ) -> GameSession<'d, '_> {
         GameSession {
             trajectory: Vec::new(),
             state: initial_state,
@@ -94,22 +93,17 @@ impl<B: Backend> Agent<B> {
         self.memory.len()
     }
 
-    pub fn model(&self) -> &Model<B> {
+    pub fn model(&self) -> &Model {
         &self.model
     }
 
-    pub fn into_model(self) -> Model<B> {
+    pub fn into_model(self) -> Model {
         self.model
     }
 }
 
-impl<B: AutodiffBackend> Agent<B> {
-    pub fn train_model(
-        &mut self,
-        device: &B::Device,
-        optim: &mut impl Optimizer<Model<B>, B>,
-        lr: f64,
-    ) {
+impl Agent {
+    pub fn train_model(&mut self, device: &Device, optim: &mut ModuleOptimizer, lr: f64) {
         let mut rng = rand::rng();
         let (states, (actions, rewards)): (Vec<_>, (Vec<_>, Vec<_>)) = self
             .memory
@@ -119,7 +113,7 @@ impl<B: AutodiffBackend> Agent<B> {
             .unzip();
         let model_input = chess_to_tensor(&states, device);
         let model_output = self.model.forward(model_input);
-        let targets: Tensor<B, 1> = Tensor::from_floats(actions.as_slice(), device);
+        let targets: Tensor<1> = Tensor::from_floats(actions.as_slice(), device);
         let targets = targets.one_hot(UciMoveId::TOTAL as usize).detach();
         let rewards = Tensor::from_floats(rewards.as_slice(), device).detach();
         let grads = MseLoss::new()

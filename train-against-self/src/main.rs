@@ -2,12 +2,7 @@
 
 use std::mem::take;
 
-use burn::{
-    backend::Autodiff,
-    module::Module,
-    optim::AdamConfig,
-    record::{FullPrecisionSettings, NamedMpkFileRecorder},
-};
+use burn::{optim::AdamConfig, prelude::*, tensor::Device};
 use qchess_bot::{
     encode::UciMoveId,
     model::{Model, ModelConfig},
@@ -18,35 +13,15 @@ use rand::seq::IndexedRandom;
 use shakmaty::{Chess, Color, KnownOutcome, Outcome, Position};
 
 fn main() {
-    cfg_select! {
-        feature = "wgpu" => {
-            type MyBackend = Autodiff<burn::backend::Wgpu<f32, i32>>;
-        }
-        feature = "cuda" => {
-            type MyBackend = Autodiff<burn::backend::Cuda<f32, i32>>;
-        }
-        feature = "tch" => {
-            type MyBackend = Autodiff<burn::backend::LibTorch<f32>>;
-        }
-        feature = "cpu" => {
-            type MyBackend = Autodiff<burn::backend::NdArray<f32, i32>>;
-        }
-        feature = "flex" => {
-            type MyBackend = Autodiff<burn::backend::Flex<f32, i32>>;
-        }
-    }
-
     let device = cfg_select! {
-        feature = "wgpu" => Default::default(),
-        feature = "cuda" => Default::default(),
-        feature = "tch" => burn::backend::libtorch::LibTorchDevice::Cuda(0),
-        feature = "cpu" => Default::default(),
-        feature = "flex" => Default::default(),
+        feature = "wgpu" => Device::wgpu(DeviceKind::DefaultDevice),
+        feature = "cuda" => Device::cuda(),
+        feature = "cpu" => Device::flex(),
     };
 
     let model_config = ModelConfig {};
 
-    let model: Model<MyBackend> = model_config.init(&device);
+    let model: Model = model_config.init(&device);
 
     println!("{model}");
 
@@ -114,6 +89,8 @@ fn main() {
                 trainer.train(&mut optim, lr);
                 train_counter += 1;
             }
+
+            device.memory_cleanup();
         }
 
         // run evaluation against random
@@ -164,12 +141,10 @@ fn main() {
         }
     }
 
-    // Save model in MessagePack format with full precision
     let model_path = "model";
-    let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
     trainer
         .model()
         .clone()
-        .save_file(model_path, &recorder)
+        .save_file(model_path)
         .expect("Should be able to save the model");
 }
