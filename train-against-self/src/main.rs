@@ -19,6 +19,8 @@ fn main() {
         feature = "cpu" => Device::flex(),
     };
 
+    let device = device.autodiff();
+
     let model_config = ModelConfig {};
 
     let model: Model = model_config.init(&device);

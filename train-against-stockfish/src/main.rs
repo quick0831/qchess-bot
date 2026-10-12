@@ -14,7 +14,8 @@ use uciengine::uciengine::*;
 async fn main() {
     let model_config = ModelConfig {};
 
-    let device = Device::wgpu(DeviceKind::DefaultDevice);
+    let device = Device::wgpu(DeviceKind::DefaultDevice).autodiff();
+
     let model: Model = model_config.init(&device);
 
     println!("{model}");
